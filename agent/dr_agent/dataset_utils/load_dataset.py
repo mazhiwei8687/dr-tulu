@@ -16,6 +16,7 @@ from .data_types import DatasetConfig
 SUPPORTED_TASKS = {
     "genetic_diseases_qa": "parkmoll/genetic-variants-qa",
     "deep_scholar_bench": "xinranz3/deepscholar_bench_fixed",
+    "deep_research_bench": "rl-research/deep_research_bench_eval",
     "sqav2": "allenai/asta-bench",
     "researchqa": "realliyifei/ResearchQA",
     "2wiki": "akariasai/2wiki_rand1k",
@@ -70,6 +71,7 @@ def get_ablation_sample_size(benchmark: str, subset_name: str = None) -> int:
         "simpleqa": 1000,
         "researchqa": 100,
         "deep_scholar_bench": 63,
+        "deep_research_bench": 100,
         "sqav2": 100,
         "genetic_diseases_qa": 100,
         "2wiki": 100,
@@ -129,6 +131,8 @@ def load_dataset(config: DatasetConfig) -> List[Dict]:
         return load_researchqa_data(num_examples, shuffle)
     elif config["name"] == "deep_scholar_bench":
         return load_deep_scholar_bench_data(num_examples)
+    elif config["name"] == "deep_research_bench":
+        return load_deep_research_bench_data(num_examples, shuffle)
     elif config["name"] == "sqav2":
         return load_sqav2_data(num_examples, shuffle)
     elif config["name"] == "genetic_diseases_qa":
@@ -138,7 +142,7 @@ def load_dataset(config: DatasetConfig) -> List[Dict]:
         return load_shortformqa_data(dataset_repo, num_examples, shuffle)
     else:
         raise ValueError(
-            f"Unsupported dataset: {config['name']}. Supported datasets: {list(SUPPORTED_TASKS.keys())}, browsecomp, simpleqa, healthbench, researchqa"
+            f"Unsupported dataset: {config['name']}. Supported datasets: {list(SUPPORTED_TASKS.keys())}, browsecomp, simpleqa, healthbench, researchqa, deep_research_bench"
         )
 
 
@@ -419,6 +423,41 @@ Exact Answer: <your succinct, final answer>
 """.strip()
         )
         examples.append(example)
+
+    if shuffle:
+        random.seed(42)
+        random.shuffle(examples)
+
+    if num_examples:
+        examples = examples[:num_examples]
+
+    return examples
+
+
+def load_deep_research_bench_data(
+    num_examples: Optional[int] = None, shuffle: bool = False
+) -> List[Dict]:
+    """
+    Load Deep Research Bench dataset data.
+
+    Args:
+        num_examples: Limit to first N examples (optional)
+        shuffle: Whether to shuffle the examples
+
+    Returns:
+        List of Deep Research Bench examples
+    """
+    data = datasets.load_dataset("rl-research/deep_research_bench_eval", split="test")
+
+    examples = []
+    for sample in data:
+        examples.append(
+            {
+                "id": sample["id"],
+                "problem": sample["prompt"],
+                "additional_instructions": "Please write a well structured, data-driven report on the given research question, and add citations when needed.",
+            }
+        )
 
     if shuffle:
         random.seed(42)
