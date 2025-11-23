@@ -1,6 +1,6 @@
 # Before running this script, you may need to
 # Launch the mcp server:
-# python -m mcp_agents.mcp_backend.main --port 8000
+# python -m dr_agent.mcp_backend.main --port 8000
 
 DATEUID=20250902
 MAX_CONCURRENT=10
