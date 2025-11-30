@@ -1,5 +1,5 @@
 <div align="center">
-<img src="rl/open-instruct/assets/dr_tulu_logo.png" alt="DR Tulu" width="500"/>
+<img src="rl/open-instruct/assets/rler_teaser.png" alt="DR Tulu" width="500"/>
 
 # DR Tulu: Reinforcement Learning with Evolving Rubrics for Deep Research
 
