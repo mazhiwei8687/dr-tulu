@@ -1,5 +1,5 @@
 <div align="center">
-<img src="rl/open-instruct/assets/rler_teaser.png" alt="DR Tulu" width="500"/>
+<img src="rl/open-instruct/assets/dr_tulu_logo.png" alt="DR Tulu" width="500"/>
 
 # DR Tulu: Reinforcement Learning with Evolving Rubrics for Deep Research
 
@@ -11,7 +11,7 @@
 DR Tulu-8B is the first open Deep Research (DR) model trained for long-form DR tasks. DR Tulu-8B matches OpenAI DR on long-form DR benchmarks.
 
 <div align="center">
-<img src="assets/dr-tulu.png" alt="DR Tulu Overview" width="800"/>
+<img src="assets/rler_teaser.png" alt="DR Tulu Overview" width="800"/>
 </div>
 
 ---
