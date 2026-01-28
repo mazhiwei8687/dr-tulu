@@ -411,7 +411,6 @@ class Args:
     tool_max_concurrency: int = 512
     """The maximum number of concurrent tool calls allowed across all rollouts per tool."""
 
-
     ### begin per-tool settings ###
     # code-tool specific settings
     code_tool_api_endpoint: Optional[str] = None
@@ -445,7 +444,6 @@ class Args:
     context_chars: int = 6000
     """The context characters for the MCP serper browse tool."""
     ### end per-tool settings ###
-
 
     # Reward function override
     overwrite_reward_fn_tag: Optional[str] = None
@@ -500,10 +498,10 @@ class Args:
         if self.num_samples_per_prompt_rollout == 1:
             print("WARNING: num_samples_per_prompt_rollout is 1. This reduces GRPO to REINFORCE. ")
         assert (
-            self.apply_verifiable_reward or self.apply_r1_style_format_reward or self.non_stop_penalty
+                self.apply_verifiable_reward or self.apply_r1_style_format_reward or self.non_stop_penalty
         ), "At least one reward must be applied!"
         assert (
-            self.pack_length >= self.max_prompt_token_length + self.response_length
+                self.pack_length >= self.max_prompt_token_length + self.response_length
         ), "The `pack_length` needs to be greater than the sum of `max_prompt_token_length` and `response_length`!"
         if self.checkpoint_state_freq > 0 and self.checkpoint_state_dir is None:
             raise ValueError("`checkpoint_state_dir` must be provided if `checkpoint_state_freq` is greater than 0!")
@@ -522,7 +520,8 @@ class Args:
         if self.tools is not None and len(self.tools) > 0:
             for tool in self.tools:
                 if tool not in TOOL_CLASS_REGISTRY:
-                    raise ValueError(f"Tool {tool} is not supported. Supported tools are: {', '.join(TOOL_CLASS_REGISTRY.keys())}")
+                    raise ValueError(
+                        f"Tool {tool} is not supported. Supported tools are: {', '.join(TOOL_CLASS_REGISTRY.keys())}")
             assert len(self.tools) == len(set(self.tools)), "Duplicate tools are not allowed"
         if self.tools and "mcp" in self.tools:
             if self.mcp_tool_names is None:
@@ -530,9 +529,12 @@ class Args:
             self.mcp_tool_names = [n.strip() for n in self.mcp_tool_names.split(",") if n.strip()]
             for mcp_tool_name in self.mcp_tool_names:
                 if mcp_tool_name not in MCP_TOOL_REGISTRY:
-                    raise ValueError(f"MCP tool {mcp_tool_name} is not supported. Supported tools are: {', '.join(MCP_TOOL_REGISTRY.keys())}")
+                    raise ValueError(
+                        f"MCP tool {mcp_tool_name} is not supported. Supported tools are: {', '.join(MCP_TOOL_REGISTRY.keys())}")
         if self.mix_partial_rollouts:
-            self.partial_rollouts_model_names = [n.strip() for n in self.partial_rollouts_model_names.split(",") if n.strip()]
+            self.partial_rollouts_model_names = [n.strip() for n in self.partial_rollouts_model_names.split(",") if
+                                                 n.strip()]
+
 
 def masked_mean(values: torch.Tensor, mask: torch.Tensor, axis: Optional[int] = None) -> torch.Tensor:
     """Compute mean of tensor with a masked values."""
@@ -599,7 +601,7 @@ class ShufflingIterator:
             self.rng.shuffle(self.data)
 
         end_index = self.index + self.batch_size
-        batch = self.data[self.index : end_index].tolist()
+        batch = self.data[self.index: end_index].tolist()
         self.index = end_index
 
         return batch
@@ -607,13 +609,21 @@ class ShufflingIterator:
 
 @ray.remote(num_gpus=1)
 class PolicyTrainerRayProcess(RayProcess):
+    """
+    包裹多个 Learner Actor, 每个绑定一个 GPU
+    负责 DeepSpeed 的模型加载与训练
+    以及优化器和学习率调度器的创建
+    以及检查点的加载与保存
+    以及参考模型的创建与更新
+    """
+
     def from_pretrained(
-        self,
-        args: Args,
-        model_config: ModelConfig,
-        beaker_config: BeakerRuntimeConfig,
-        wandb_url: str,
-        tokenizer: PreTrainedTokenizer,
+            self,
+            args: Args,
+            model_config: ModelConfig,
+            beaker_config: BeakerRuntimeConfig,
+            wandb_url: str,
+            tokenizer: PreTrainedTokenizer,
     ):
         # ------------------------------------------------------------
         # Monkey patch to load checkpoints with `weights_only=False`
@@ -743,13 +753,13 @@ class PolicyTrainerRayProcess(RayProcess):
         return optimization_steps_done
 
     def forward(
-        self,
-        model: PreTrainedModel,
-        query_response: torch.LongTensor,
-        attention_mask: torch.LongTensor,
-        position_ids: torch.LongTensor,
-        pad_token_id: int,
-        temperature: float,
+            self,
+            model: PreTrainedModel,
+            query_response: torch.LongTensor,
+            attention_mask: torch.LongTensor,
+            position_ids: torch.LongTensor,
+            pad_token_id: int,
+            temperature: float,
     ) -> torch.Tensor:
         # Replace pad tokens with 0s so that we don't run into index out of bounds errors
         padding_mask = query_response != pad_token_id
@@ -853,8 +863,8 @@ class PolicyTrainerRayProcess(RayProcess):
         for ref_param, param in zip(self.ref_policy.parameters(), self.model.parameters()):
             if self.args.deepspeed_stage == 3:
                 with deepspeed.zero.GatheredParameters(
-                    [param, ref_param],
-                    modifier_rank=0,
+                        [param, ref_param],
+                        modifier_rank=0,
                 ):
                     if deepspeed.comm.get_rank() == 0:
                         ref_param.data.mul_(1.0 - self.args.alpha).add_(param.data, alpha=self.args.alpha)
@@ -862,15 +872,15 @@ class PolicyTrainerRayProcess(RayProcess):
                 ref_param.data.mul_(1.0 - self.args.alpha).add_(param.data, alpha=self.args.alpha)
 
     def train(
-        self,
-        collated_query_responses,
-        collated_tool_masks,
-        collated_attention_masks,
-        collated_position_ids,
-        collated_advantages,
-        collated_response_masks,
-        pad_token_id: int,
-        num_mini_batches: int,
+            self,
+            collated_query_responses,
+            collated_tool_masks,
+            collated_attention_masks,
+            collated_position_ids,
+            collated_advantages,
+            collated_response_masks,
+            pad_token_id: int,
+            num_mini_batches: int,
     ):
         args = self.args
         to_device_inplace(collated_query_responses, self.device)
@@ -985,11 +995,12 @@ class PolicyTrainerRayProcess(RayProcess):
 
                     # grpo change: directly subtract KL in loss (add)
                     loss = masked_mean(pg_loss_max + (args.beta * kl), mb_response_masks_bool, args.masked_mean_axis)
-                    
+
                     # Skip backward/step if loss is NaN, but still log metrics
                     if torch.isnan(loss):
                         if self.rank == 0:
-                            print(f"⚠️ [Rank {self.rank}] Skipping backward/step due to NaN loss at local_step {local_step}, epoch {epoch_idx}, batch {i}")
+                            print(
+                                f"⚠️ [Rank {self.rank}] Skipping backward/step due to NaN loss at local_step {local_step}, epoch {epoch_idx}, batch {i}")
                     else:
                         loss = loss / accumulation_steps
                         self.model.backward(loss)
@@ -1118,11 +1129,11 @@ class PolicyTrainerRayProcess(RayProcess):
 
 class ModelGroup:
     def __init__(
-        self,
-        pg: PlacementGroup,
-        ray_process_cls: RayProcess,
-        num_gpus_per_node: List[int],
-        single_gpu_mode: bool,
+            self,
+            pg: PlacementGroup,
+            ray_process_cls: RayProcess,
+            num_gpus_per_node: List[int],
+            single_gpu_mode: bool,
     ):
         self.pg = pg
         self.ray_process_cls = ray_process_cls
@@ -1173,22 +1184,22 @@ class ModelGroup:
 
 
 def vllm_generate_thread(
-    vllm_engines: List[ray.actor.ActorHandle],
-    generation_config: SamplingParams,
-    eval_generation_config: SamplingParams,
-    inference_results_Q: Queue,
-    param_prompt_Q: Queue,
-    num_training_steps: int,
-    eval_prompt_token_ids: Optional[List[int]],
-    evaluation_inference_results_Q: Queue,
-    eval_freq: int,
-    resume_training_step: int = 1,
-    tool_use: bool = False,
+        vllm_engines: List[ray.actor.ActorHandle],
+        generation_config: SamplingParams,
+        eval_generation_config: SamplingParams,
+        inference_results_Q: Queue,
+        param_prompt_Q: Queue,
+        num_training_steps: int,
+        eval_prompt_token_ids: Optional[List[int]],
+        evaluation_inference_results_Q: Queue,
+        eval_freq: int,
+        resume_training_step: int = 1,
+        tool_use: bool = False,
 ):
     def generate_with_engines(prompts: List[List[int]], sampling_params: SamplingParams):
         # Split queries between engines
         queries_per_engine = (len(prompts) + len(vllm_engines) - 1) // len(vllm_engines)
-        split_queries = [prompts[i : i + queries_per_engine] for i in range(0, len(prompts), queries_per_engine)]
+        split_queries = [prompts[i: i + queries_per_engine] for i in range(0, len(prompts), queries_per_engine)]
         # Generate responses in parallel across engines
         futures = [
             vllm_engine.generate.remote(sampling_params=sampling_params, prompt_token_ids=queries, use_tqdm=False)
@@ -1243,12 +1254,13 @@ def vllm_generate_thread(
         inference_results_Q.put((response_ids, finish_reasons, masks, info))
 
         # Evaluate the model
-        if eval_prompt_token_ids is not None and ((training_step - 1) % eval_freq == 0 or args.eval_at_step == training_step):
+        if eval_prompt_token_ids is not None and (
+                (training_step - 1) % eval_freq == 0 or args.eval_at_step == training_step):
             response_ids, finish_reasons, masks, info = generate_with_engines(
                 eval_prompt_token_ids, eval_generation_config
             )
             evaluation_inference_results_Q.put((response_ids, finish_reasons, masks, info))
-    
+
     # Handle step 0 evaluation if requested
     if args.eval_at_step == 0 and eval_prompt_token_ids is not None:
         print("[vLLM Generate Thread] 📊 Running step 0 evaluation before training starts")
@@ -1259,15 +1271,15 @@ def vllm_generate_thread(
 
 
 def data_preparation_thread(
-    reward_fn: Callable,
-    inference_results_Q: Queue,
-    packed_sequences_Q: Queue,
-    queries_prompt_Q: Queue,
-    args: Args,
-    tokenizer: PreTrainedTokenizer,
-    num_training_steps: int,
-    rubric_buffer: Optional[Dict] = None,
-    transform_fn_args: Optional[List] = None,
+        reward_fn: Callable,
+        inference_results_Q: Queue,
+        packed_sequences_Q: Queue,
+        queries_prompt_Q: Queue,
+        args: Args,
+        tokenizer: PreTrainedTokenizer,
+        num_training_steps: int,
+        rubric_buffer: Optional[Dict] = None,
+        transform_fn_args: Optional[List] = None,
 ):
     for training_step in range(1, num_training_steps + 1):
         # Get next batch of prompts and responses
@@ -1293,7 +1305,7 @@ def data_preparation_thread(
                 # in that case, we need to add the eos token to the response
                 # note that this also adds eos to the end of reponses that stopped for other reasons.
                 if finish_reasons[i] == "stop" and (
-                    len(responses[i]) == 0 or responses[i][-1] != tokenizer.eos_token_id
+                        len(responses[i]) == 0 or responses[i][-1] != tokenizer.eos_token_id
                 ):
                     responses[i].append(tokenizer.eos_token_id)
                     masks[i].append(1)  # never mask the eos token for now?
@@ -1304,40 +1316,44 @@ def data_preparation_thread(
             # currently, is just the first user turn. 
             decoded_queries = raw_user_query
             stop_rate = sum(int(finish_reason == "stop") for finish_reason in finish_reasons) / len(finish_reasons)
-            
+
             # DEBUG: Log a few sample responses to check for answer tags
             if training_step % 10 == 0 and args.log_training_rollouts:  # Log every 10 steps
                 print(f"[DEBUG] Sample responses at step {training_step}:")
                 for i in range(min(3, len(decoded_responses))):
                     print(f"  Response {i}: {decoded_responses[i][:200]}...{decoded_responses[i][-200:]}")
-                    has_answer_tags = any(tag in decoded_responses[i] for tag in ['</answer0>', '</answer1>', '</answer>', '<answer>'])
+                    has_answer_tags = any(
+                        tag in decoded_responses[i] for tag in ['</answer0>', '</answer1>', '</answer>', '<answer>'])
                     print(f"  Has answer tags: {has_answer_tags}")
                 print()
 
         # Add static rubrics to active rubrics every N steps when use_static_rubrics_as_persistent_rubrics is False
-        if (rubric_buffer is not None and 
-            not args.use_static_rubrics_as_persistent_rubrics and 
-            training_step % args.add_static_rubrics_to_active_rubrics_every_n_steps == 0):
-            
+        if (rubric_buffer is not None and
+                not args.use_static_rubrics_as_persistent_rubrics and
+                training_step % args.add_static_rubrics_to_active_rubrics_every_n_steps == 0):
+
             added_count = 0
             for query, buffer_data in rubric_buffer.items():
                 static_rubrics = buffer_data.get("static_rubrics", [])
                 active_rubrics = buffer_data.get("active_rubrics", [])
-                
+
                 # Check each static rubric and add if not already in active rubrics
                 for static_rubric in static_rubrics:
                     # Check if this rubric is already in active rubrics (avoid duplicates)
                     if static_rubric not in active_rubrics:
                         active_rubrics.append(static_rubric)
                         added_count += 1
-            
+
             if added_count > 0:
-                print(f"[Adaptive Rubric Management] Added {added_count} static rubrics to active rubrics at step {training_step}")
+                print(
+                    f"[Adaptive Rubric Management] Added {added_count} static rubrics to active rubrics at step {training_step}")
 
         with Timer("💰 [Data Preparation Thread] Calculating rewards and advantages"):
             result = asyncio.run(
                 reward_fn(
-                    responses, decoded_responses, ground_truths, datasets, finish_reasons, infos, decoded_queries, rubric_buffer=rubric_buffer, is_training=True, training_step=training_step, transform_fn_args=transform_fn_args, tokenizer=tokenizer, masks=masks
+                    responses, decoded_responses, ground_truths, datasets, finish_reasons, infos, decoded_queries,
+                    rubric_buffer=rubric_buffer, is_training=True, training_step=training_step,
+                    transform_fn_args=transform_fn_args, tokenizer=tokenizer, masks=masks
                 )
             )
             adaptive_rubric_scores_for_saving = None
@@ -1380,16 +1396,16 @@ def data_preparation_thread(
                 # Normalized Mean Absolute Deviation (NMAD) per prompt
                 # NMAD = mean(|r - mean(r)|) / (std(r) + eps)
                 eps = 1e-8
-                per_means = scores_per_prompt.mean(axis=1)                     # [P]
-                per_stds  = scores_per_prompt.std(axis=1, ddof=0)              # [P]
-                abs_dev   = np.abs(scores_per_prompt - per_means[:, None])     # [P, M]
-                nmad      = abs_dev.mean(axis=1) / (per_stds + eps)            # [P]
+                per_means = scores_per_prompt.mean(axis=1)  # [P]
+                per_stds = scores_per_prompt.std(axis=1, ddof=0)  # [P]
+                abs_dev = np.abs(scores_per_prompt - per_means[:, None])  # [P, M]
+                nmad = abs_dev.mean(axis=1) / (per_stds + eps)  # [P]
 
                 reward_metrics["objective/nmad_mean"] = float(nmad.mean())
-                reward_metrics["objective/nmad_std"]  = float(nmad.std())
-                reward_metrics["objective/nmad_min"]  = float(nmad.min())
-                reward_metrics["objective/nmad_max"]  = float(nmad.max())
-                
+                reward_metrics["objective/nmad_std"] = float(nmad.std())
+                reward_metrics["objective/nmad_min"] = float(nmad.min())
+                reward_metrics["objective/nmad_max"] = float(nmad.max())
+
             if args.log_separation_scores:
                 # Compute your original separation score after linearly scaling rewards
                 # from [0, max_possible_score] -> [-1, 1] to remove scale/positivity effects.
@@ -1398,38 +1414,39 @@ def data_preparation_thread(
                     # Fallback to a sane positive scale if misconfigured
                     max_possible = float(max(1.0, np.max(scores)))
 
-                R = np.asarray(scores_per_prompt, dtype=np.float64)          # [P, M] raw rewards
+                R = np.asarray(scores_per_prompt, dtype=np.float64)  # [P, M] raw rewards
                 R = np.clip(R, 0.0, max_possible)
-                S = (R / max_possible) * 2.0 - 1.0                           # scaled to [-1, 1]
+                S = (R / max_possible) * 2.0 - 1.0  # scaled to [-1, 1]
 
-                centers = S.mean(axis=1, keepdims=True)                      # [P, 1]
-                dev = S - centers                                            # [P, M]
-                num = np.abs(dev).sum(axis=1)                                # [P]
-                signs = np.sign(dev)                                         # [-1, 0, 1], [P, M]
-                den = np.abs(signs - centers).sum(axis=1)                    # [P]
+                centers = S.mean(axis=1, keepdims=True)  # [P, 1]
+                dev = S - centers  # [P, M]
+                num = np.abs(dev).sum(axis=1)  # [P]
+                signs = np.sign(dev)  # [-1, 0, 1], [P, M]
+                den = np.abs(signs - centers).sum(axis=1)  # [P]
 
                 sep = np.where(den > 0.0, num / den, np.where(num == 0.0, 0.0, 1.0))  # [P]
 
                 reward_metrics["objective/separation_scaled_mean"] = float(sep.mean())
-                reward_metrics["objective/separation_scaled_std"]  = float(sep.std(ddof=0))
-                reward_metrics["objective/separation_scaled_min"]  = float(sep.min())
-                reward_metrics["objective/separation_scaled_max"]  = float(sep.max())
+                reward_metrics["objective/separation_scaled_std"] = float(sep.std(ddof=0))
+                reward_metrics["objective/separation_scaled_min"] = float(sep.min())
+                reward_metrics["objective/separation_scaled_max"] = float(sep.max())
                 # Optional: track how close centers are to edges after scaling
-                reward_metrics["objective/separation_scaled_center_abs_mean"] = float(np.mean(np.abs(centers.squeeze(1))))
-
+                reward_metrics["objective/separation_scaled_center_abs_mean"] = float(
+                    np.mean(np.abs(centers.squeeze(1))))
 
         # Log training rollouts if enabled
         training_rollouts_data = None
         if args.log_training_rollouts and training_step % args.log_training_rollouts_freq == 0 and args.with_tracking:
             print(f"[Data Preparation Thread] 📊 Preparing training rollouts for logging at step {training_step}")
-            
+
             # Select a subset of samples for logging
             num_to_log = min(args.num_training_rollouts_to_log, len(responses))
             if num_to_log > 0:
                 indices_to_log = np.random.choice(len(responses), size=num_to_log, replace=False)
-                
+
                 training_rollouts_data = {
-                    "prompt": [extract_user_query(tokenizer.decode(queries[i], skip_special_tokens=True)) for i in indices_to_log],
+                    "prompt": [extract_user_query(tokenizer.decode(queries[i], skip_special_tokens=True)) for i in
+                               indices_to_log],
                     "response": [decoded_responses[i] for i in indices_to_log],
                     "scores": [float(scores[i]) for i in indices_to_log],
                     "advantages": [float(advantages[i]) for i in indices_to_log],
@@ -1518,16 +1535,16 @@ def data_preparation_thread(
 
         with Timer("🔄 [Data Preparation Thread] Prepare collated data for each worker"):
             B = (
-                len(packed_sequences.query_responses) // args.world_size
+                    len(packed_sequences.query_responses) // args.world_size
             )  # essentially doing `drop_last=True`, which is fine.
             collated_data = []
             for i in range(args.world_size):
-                per_device_packed_query_responses = packed_sequences.query_responses[B * i : B * (i + 1)]
-                per_device_packed_tool_masks = packed_sequences.tool_masks[B * i : B * (i + 1)]
-                per_device_packed_attention_masks = packed_sequences.attention_masks[B * i : B * (i + 1)]
-                per_device_packed_position_ids = packed_sequences.position_ids[B * i : B * (i + 1)]
-                per_device_packed_advantages = packed_sequences.advantages[B * i : B * (i + 1)]
-                per_device_packed_response_masks = packed_sequences.response_masks[B * i : B * (i + 1)]
+                per_device_packed_query_responses = packed_sequences.query_responses[B * i: B * (i + 1)]
+                per_device_packed_tool_masks = packed_sequences.tool_masks[B * i: B * (i + 1)]
+                per_device_packed_attention_masks = packed_sequences.attention_masks[B * i: B * (i + 1)]
+                per_device_packed_position_ids = packed_sequences.position_ids[B * i: B * (i + 1)]
+                per_device_packed_advantages = packed_sequences.advantages[B * i: B * (i + 1)]
+                per_device_packed_response_masks = packed_sequences.response_masks[B * i: B * (i + 1)]
 
                 # Shuffle the batch and collate the data
                 b_inds = np.random.permutation(len(per_device_packed_query_responses))
@@ -1538,7 +1555,7 @@ def data_preparation_thread(
                 collated_response_masks = []
                 collated_advantages = []
                 for j in range(0, len(per_device_packed_query_responses), args.per_device_train_batch_size):
-                    micro_range = b_inds[j : j + args.per_device_train_batch_size]
+                    micro_range = b_inds[j: j + args.per_device_train_batch_size]
                     collated_query_responses.append(
                         collate_fn(
                             [per_device_packed_query_responses[idx] for idx in micro_range], tokenizer.pad_token_id
@@ -1626,7 +1643,7 @@ def data_preparation_thread(
             with open(f"{args.output_dir}/traces_{args.run_name}.jsonl", "a") as f:
                 json.dump(traces, f)
                 f.write("\n")
-        
+
         # Save adaptive rubrics if requested
         if args.save_adaptive_rubrics and adaptive_rubric_scores_for_saving is not None:
             adaptive_rubrics_data = {
@@ -1671,7 +1688,7 @@ def launch_mcp_subprocess(run_mcp_command: str, output_dir: str) -> Optional[sub
         Popen object if launched, None otherwise
     """
     print(f"🚀 Launching MCP server subprocess: {run_mcp_command}")
-    
+
     # Debug: Check if fastmcp command exists
     try:
         import shutil
@@ -1682,16 +1699,16 @@ def launch_mcp_subprocess(run_mcp_command: str, output_dir: str) -> Optional[sub
             print("⚠️  Warning: fastmcp command not found in PATH")
     except Exception as e:
         print(f"⚠️  Warning: Could not check for fastmcp: {e}")
-    
+
     # Debug: Show current working directory
     print(f"📁 Current working directory: {os.getcwd()}")
-    
+
     # Create log files for MCP server output
     mcp_logs_dir = os.path.join(output_dir, "mcp_logs")
     os.makedirs(mcp_logs_dir, exist_ok=True)
     mcp_stdout = open(os.path.join(mcp_logs_dir, "mcp_server_stdout.log"), "w")
     mcp_stderr = open(os.path.join(mcp_logs_dir, "mcp_server_stderr.log"), "w")
-    
+
     mcp_process = subprocess.Popen(
         [run_mcp_command],
         shell=True,
@@ -1701,15 +1718,16 @@ def launch_mcp_subprocess(run_mcp_command: str, output_dir: str) -> Optional[sub
     )
     try:
         # Launch subprocess in new process group to avoid signal interference
-        
+
         # Give the server time to start
         time.sleep(3)
-        
+
         # Check if process is still running
         if mcp_process.poll() is None:
             print(f"✅ MCP server started successfully (PID: {mcp_process.pid})")
-            print(f"📋 MCP server logs: {os.path.relpath(mcp_logs_dir)}/mcp_server_stdout.log, {os.path.relpath(mcp_logs_dir)}/mcp_server_stderr.log")
-            
+            print(
+                f"📋 MCP server logs: {os.path.relpath(mcp_logs_dir)}/mcp_server_stdout.log, {os.path.relpath(mcp_logs_dir)}/mcp_server_stderr.log")
+
             # Register cleanup function
             def cleanup_mcp():
                 if mcp_process.poll() is None:
@@ -1724,10 +1742,10 @@ def launch_mcp_subprocess(run_mcp_command: str, output_dir: str) -> Optional[sub
                         pass
                 mcp_stdout.close()
                 mcp_stderr.close()
-            
+
             atexit.register(cleanup_mcp)
             return mcp_process
-            
+
         else:
             print(f"❌ MCP server failed to start (exit code: {mcp_process.returncode})")
             # Read any error output
@@ -1745,7 +1763,7 @@ def launch_mcp_subprocess(run_mcp_command: str, output_dir: str) -> Optional[sub
             except Exception as e:
                 print(f"⚠️  Could not read MCP server logs: {e}")
             return None
-            
+
     except Exception as e:
         print(f"❌ Error launching MCP server: {e}")
         mcp_stdout.close()
@@ -1761,8 +1779,8 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
         model_config.model_name_or_path if tc.tokenizer_name_or_path is None else tc.tokenizer_name_or_path
     )
     if (
-        tc.tokenizer_revision != model_config.model_revision
-        and tc.tokenizer_name_or_path != model_config.model_name_or_path
+            tc.tokenizer_revision != model_config.model_revision
+            and tc.tokenizer_name_or_path != model_config.model_name_or_path
     ):
         # Warn user if tokenizer and model use different revisions; this is an unusual
         # use case.
@@ -1781,7 +1799,7 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
         args.dataset_local_cache_dir = "/weka/oe-adapt-default/allennlp/deletable_open_instruct_dataset_cache"
     args.world_size = sum(args.num_learners_per_node)
     args.num_training_steps = args.total_episodes // (
-        args.num_unique_prompts_rollout * args.num_samples_per_prompt_rollout
+            args.num_unique_prompts_rollout * args.num_samples_per_prompt_rollout
     )
     args.eval_freq = max(1, args.num_training_steps // args.num_evals)
     args.try_launch_beaker_eval_jobs_on_weka = args.try_launch_beaker_eval_jobs_on_weka and is_beaker_job()
@@ -1835,15 +1853,18 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
             path = Path(args.system_prompt_file)
             if path.exists():
                 system_prompt_text = path.read_text().strip()
-            print(f"Using system prompt from {args.system_prompt_file}:\n############\n{system_prompt_text}\n############\n")
+            print(
+                f"Using system prompt from {args.system_prompt_file}:\n############\n{system_prompt_text}\n############\n")
         elif args.system_prompt_file.endswith(".yaml"):
             assert Path(args.system_prompt_file).exists()
             with open(args.system_prompt_file, "r", encoding="utf-8") as file:
                 prompt = yaml.safe_load(file)
                 system_prompt_text = prompt["system_prompt"]
                 additional_question_instructions = prompt["additional_instructions"]
-                print(f"Using system prompt from {args.system_prompt_file}:\n############\n{system_prompt_text}\n############\n")
-                print(f"Using additional question instructions from {args.system_prompt_file}:\n############\n{additional_question_instructions}\n############\n")
+                print(
+                    f"Using system prompt from {args.system_prompt_file}:\n############\n{system_prompt_text}\n############\n")
+                print(
+                    f"Using additional question instructions from {args.system_prompt_file}:\n############\n{additional_question_instructions}\n############\n")
         else:
             raise ValueError(f"System prompt file {args.system_prompt_file} does not exist or is not a yaml/txt file.")
     transform_fn_args = [
@@ -1888,7 +1909,7 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
     visualize_token(train_dataset[0][INPUT_IDS_PROMPT_KEY], tokenizer)
     if args.cache_dataset_only:
         return
-    
+
     # Initialize rubric buffer
     rubric_buffer = None
     if args.apply_adaptive_rubric_reward and args.use_rubric_buffer:
@@ -1903,12 +1924,12 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
             else:
                 gt = json.loads(ex[GROUND_TRUTHS_KEY])
             rubric_buffer[gt['query']] = {
-                'active_rubrics': [] if args.use_static_rubrics_as_persistent_rubrics else gt['rubrics'], 
+                'active_rubrics': [] if args.use_static_rubrics_as_persistent_rubrics else gt['rubrics'],
                 'inactive_rubrics': [],
-                'persistent_rubrics': gt['rubrics'] if args.use_static_rubrics_as_persistent_rubrics else [],  # Forced to use every time
+                'persistent_rubrics': gt['rubrics'] if args.use_static_rubrics_as_persistent_rubrics else [],
+                # Forced to use every time
                 'static_rubrics': gt['rubrics'],  # Keep a copy of original GT rubrics
             }
-    
 
     # ------------------------------------------------------------
     # Runtime setups and quick logging
@@ -1919,7 +1940,8 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
     mcp_process = None
     if args.tools and "mcp" in args.tools:
         if args.mcp_server_command is None:
-            print("mcp_server_command is not provided when mcp is in tools; please make sure to launch the MCP server manually.")
+            print(
+                "mcp_server_command is not provided when mcp is in tools; please make sure to launch the MCP server manually.")
         else:
             mcp_process = launch_mcp_subprocess(args.mcp_server_command, args.output_dir)
             if mcp_process is None:
@@ -1931,7 +1953,8 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
         ray.init(dashboard_host="0.0.0.0")  # enable debugging from a different machine (e.g., phobos)
     except:
         ray_temp_dir = os.path.join("/tmp", f"ray-{os.getpid()}")
-        ray.init(dashboard_host="0.0.0.0", _temp_dir=ray_temp_dir)  # enable debugging from a different machine (e.g., phobos)
+        ray.init(dashboard_host="0.0.0.0",
+                 _temp_dir=ray_temp_dir)  # enable debugging from a different machine (e.g., phobos)
     pg = None
     bundles = [{"GPU": actor_num_gpus, "CPU": actor_num_gpus * 10} for actor_num_gpus in args.num_learners_per_node]
     pg = placement_group(bundles, strategy="STRICT_SPREAD")
@@ -2088,16 +2111,17 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
 
     num_total_tokens = 0
     start_time = time.time()
-    
+
     # Handle step 0 evaluation if requested
     if args.eval_at_step == 0 and eval_dataset is not None:
         print("=" * 100)
         print("[Main Thread] 📊 Running step 0 evaluation before training starts")
         print("=" * 100)
-        
+
         # Wait for step 0 evaluation to complete
         try:
-            eval_responses, eval_finish_reasons, masks, eval_infos = evaluation_inference_results_Q.get(timeout=args.eval_timeout)
+            eval_responses, eval_finish_reasons, masks, eval_infos = evaluation_inference_results_Q.get(
+                timeout=args.eval_timeout)
             print("[Main Thread] 📊 Step 0 evaluation responses received")
 
             eval_sequence_lengths = np.array([len(response) for response in eval_responses])
@@ -2126,13 +2150,13 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
             else:
                 eval_scores, eval_reward_metrics = eval_result
             eval_reward_metrics = {f"eval/{key}": val for key, val in eval_reward_metrics.items()}
-            
+
             # Calculate per-dataset eval scores
             per_dataset_scores = {}
             if eval_dataset_names is not None:
                 from collections import defaultdict
                 dataset_scores = defaultdict(list)
-                
+
                 for score, dataset_name in zip(eval_scores, eval_dataset_names):
                     # Convert dataset_name to string if it's a list
                     if isinstance(dataset_name, list):
@@ -2140,17 +2164,17 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                     else:
                         dataset_name_str = str(dataset_name)
                     dataset_scores[dataset_name_str].append(score)
-                
+
                 dataset_means = []
                 for dataset_name, scores in dataset_scores.items():
                     dataset_mean = np.array(scores).mean()
                     per_dataset_scores[f"eval/scores_{dataset_name}"] = dataset_mean
                     dataset_means.append(dataset_mean)
-                
+
                 # Add macro average (equal weight to each test set)
                 if dataset_means:
                     per_dataset_scores["eval/scores_macro"] = np.array(dataset_means).mean()
-            
+
             eval_metrics = {
                 "eval/scores": np.array(eval_scores).mean(),
                 "eval/sequence_lengths": eval_sequence_lengths.mean(),
@@ -2161,15 +2185,15 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                 **per_dataset_scores,
             }
             print_rich_single_line_metrics(eval_metrics)
-            
+
             # Log step 0 evaluation metrics with episode = 0
             for key, value in eval_metrics.items():
                 writer.add_scalar(key, value, 0)
-            
+
             # Also log to W&B if tracking is enabled
             if args.with_tracking:
                 wandb.log(eval_metrics, step=0)
-            
+
             table = {}
             table["prompt"] = tokenizer.batch_decode(eval_prompt_token_ids)
             table["response"] = eval_decoded_responses
@@ -2181,14 +2205,14 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
             df = pd.DataFrame(table)
             if args.with_tracking:
                 wandb.log({"step_0_sample_completions": wandb.Table(dataframe=df)}, step=0)
-            
+
             # Always print 1 sample in the log
             print("\n" + "=" * 100)
             print("[Main Thread] 📊 Step 0 Evaluation Sample:")
             print("=" * 100)
             print_rich_table(df.iloc[:1])
             print("=" * 100 + "\n")
-            
+
             # Save raw evaluation data to JSON file
             eval_data = {
                 "step": 0,
@@ -2208,21 +2232,21 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
             with open(eval_output_path, "w") as f:
                 json.dump(eval_data, f, indent=2)
             print(f"[Main Thread] 💾 Saved step 0 evaluation data to {eval_output_path}")
-            
+
             del table
-            
+
             print("=" * 100)
             print("[Main Thread] ✅ Step 0 evaluation completed")
             print("=" * 100)
-            
+
         except Empty:
             print("[Main Thread] ⚠️  Step 0 evaluation responses not received within timeout")
-    
+
     try:
         for training_step in range(resume_training_step, args.num_training_steps + 1):
             print("-" * 100)
             episode += (
-                args.num_unique_prompts_rollout * args.num_samples_per_prompt_rollout
+                    args.num_unique_prompts_rollout * args.num_samples_per_prompt_rollout
             )  # each sample is an episode
 
             # ------------------------------------------------------------------------------------------------
@@ -2265,7 +2289,8 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                         pass
                     finally:
                         if not packing_thread.is_alive():
-                            raise RuntimeError("[Main Thread] ❌ Data preparation thread died unexpectedly; no packed data will arrive.")
+                            raise RuntimeError(
+                                "[Main Thread] ❌ Data preparation thread died unexpectedly; no packed data will arrive.")
                         print("[Main Thread] ⏳ No packed data received from thread. Waiting for 30 seconds.")
 
                 data_thread_metrics = packed_data["metrics"]
@@ -2293,9 +2318,9 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                         ]
                     )
                     if (
-                        args.ref_policy_update_freq is not None
-                        and training_step % args.ref_policy_update_freq == 0
-                        and args.alpha > 0
+                            args.ref_policy_update_freq is not None
+                            and training_step % args.ref_policy_update_freq == 0
+                            and args.alpha > 0
                     ):
                         update_ref_policy_future.extend(
                             [policy_group.models[i].update_ref_policy.remote() for i in range(args.world_size)]
@@ -2343,9 +2368,9 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                 if skip_batch:
                     continue
             if (
-                args.checkpoint_state_freq > 0
-                and training_step % args.checkpoint_state_freq == 0
-                and args.checkpoint_state_dir is not None
+                    args.checkpoint_state_freq > 0
+                    and training_step % args.checkpoint_state_freq == 0
+                    and args.checkpoint_state_dir is not None
             ):
                 with Timer("[Main Thread] 🗡️ Saving checkpoint state"):
                     client_state = {"training_step": training_step}
@@ -2383,7 +2408,6 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                 # get and log evaluation metrics
                 eval_original_dataset_names = eval_dataset[DATASET_ORIGIN_KEY]
 
-                
                 eval_result = asyncio.run(
                     reward_fn(
                         eval_responses,
@@ -2403,16 +2427,17 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                 else:
                     eval_scores, eval_reward_metrics = eval_result
                 eval_reward_metrics = {f"eval/{key}": val for key, val in eval_reward_metrics.items()}
-                
+
                 # Calculate per-dataset eval scores
                 per_dataset_scores = {}
                 if eval_dataset_names is not None:
                     from collections import defaultdict
                     dataset_scores = defaultdict(list)
-                    
+
                     # Debug: Print the actual dataset names we're seeing
                     print(f"[DEBUG] eval_dataset_names type: {type(eval_dataset_names)}")
-                    print(f"[DEBUG] First few eval_dataset_names: {eval_dataset_names[:5] if len(eval_dataset_names) > 0 else 'empty'}")
+                    print(
+                        f"[DEBUG] First few eval_dataset_names: {eval_dataset_names[:5] if len(eval_dataset_names) > 0 else 'empty'}")
                     unique_names = set()
                     for name in eval_dataset_names:
                         if isinstance(name, list):
@@ -2420,7 +2445,7 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                         else:
                             unique_names.add(str(name))
                     print(f"[DEBUG] Unique dataset names found: {unique_names}")
-                    
+
                     for score, dataset_name in zip(eval_scores, eval_dataset_names):
                         # Convert dataset_name to string if it's a list
                         if isinstance(dataset_name, list):
@@ -2428,17 +2453,17 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                         else:
                             dataset_name_str = str(dataset_name)
                         dataset_scores[dataset_name_str].append(score)
-                    
+
                     dataset_means = []
                     for dataset_name, scores in dataset_scores.items():
                         dataset_mean = np.array(scores).mean()
                         per_dataset_scores[f"eval/scores_{dataset_name}"] = dataset_mean
                         dataset_means.append(dataset_mean)
-                    
+
                     # Add macro average (equal weight to each test set)
                     if dataset_means:
                         per_dataset_scores["eval/scores_macro"] = np.array(dataset_means).mean()
-                
+
                 eval_metrics = {
                     "eval/scores": np.array(eval_scores).mean(),
                     "eval/sequence_lengths": eval_sequence_lengths.mean(),
@@ -2462,14 +2487,14 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                 df = pd.DataFrame(table)
                 if args.with_tracking:
                     wandb.log({"sample_completions": wandb.Table(dataframe=df)})
-                
+
                 # Always print 1 sample in the log
                 print("\n" + "=" * 100)
                 print(f"[Main Thread] 📊 Evaluation Sample (Step {training_step}):")
                 print("=" * 100)
                 print_rich_table(df.iloc[:1])
                 print("=" * 100 + "\n")
-                
+
                 # Save raw evaluation data to JSON file
                 eval_data = {
                     "step": training_step,
@@ -2490,7 +2515,7 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
                 with open(eval_output_path, "w") as f:
                     json.dump(eval_data, f, indent=2)
                 print(f"[Main Thread] 💾 Saved evaluation data to {eval_output_path}")
-                
+
                 del table
             except Empty:
                 print("[Main Thread] 🙈 Evaluation responses not received")
@@ -2548,10 +2573,10 @@ def main(args: Args, tc: TokenizerConfig, model_config: ModelConfig, reward_fn: 
     # Ai2 logic: we use /output to store the artifacts of the job, so we
     # make a copy of the model to `/output` in the end.
     if (
-        args.try_auto_save_to_beaker
-        and is_beaker_job()
-        and len(beaker_config.beaker_dataset_id_urls) > 0
-        and args.output_dir.rstrip("/") != "/output"
+            args.try_auto_save_to_beaker
+            and is_beaker_job()
+            and len(beaker_config.beaker_dataset_id_urls) > 0
+            and args.output_dir.rstrip("/") != "/output"
     ):
         shutil.copytree(args.output_dir, "/output", dirs_exist_ok=True)
     print("finished training")
@@ -2582,27 +2607,30 @@ if __name__ == "__main__":
     reward_fn_mapping = build_all_verifiers(args)
 
     if args.apply_adaptive_rubric_reward:
-        from open_instruct.search_rewards.utils.rubric_utils import _generate_instance_wise_adaptive_rubrics, update_ground_truths_with_adaptive_rubrics, save_adaptive_rubric_cache_safe
+        from open_instruct.search_rewards.utils.rubric_utils import _generate_instance_wise_adaptive_rubrics, \
+            update_ground_truths_with_adaptive_rubrics, save_adaptive_rubric_cache_safe
         from open_instruct.search_rewards.longform_rubric_rewards import create_rubric_key
-        from open_instruct.search_rewards.utils._direction_agreement import compute_direction_agreement, compute_direction_agreement_per_prompt
+        from open_instruct.search_rewards.utils._direction_agreement import compute_direction_agreement, \
+            compute_direction_agreement_per_prompt
     if args.mix_partial_rollouts:
         from open_instruct.search_rewards.rollout_revision import maybe_replace_on_policy_rollouts_with_partial_rollouts
 
+
     async def reward_fn(
-        responses: List[torch.Tensor],
-        decoded_responses: List[str],
-        ground_truths: List[Union[str, List[str]]],
-        datasets: List[str],
-        finish_reasons: List[str],
-        infos: List[List[int]],
-        queries: Optional[List[str]] = None,
-        source_datasets: Optional[List[str]] = None,
-        rubric_buffer: Optional[Dict[str, List[Dict[str, float]]]] = None,
-        is_training: bool = True,
-        training_step: Optional[int] = None,
-        transform_fn_args: Optional[List] = None,
-        tokenizer: Optional[PreTrainedTokenizer] = None,
-        masks: Optional[List[List[int]]] = None,
+            responses: List[torch.Tensor],
+            decoded_responses: List[str],
+            ground_truths: List[Union[str, List[str]]],
+            datasets: List[str],
+            finish_reasons: List[str],
+            infos: List[List[int]],
+            queries: Optional[List[str]] = None,
+            source_datasets: Optional[List[str]] = None,
+            rubric_buffer: Optional[Dict[str, List[Dict[str, float]]]] = None,
+            is_training: bool = True,
+            training_step: Optional[int] = None,
+            transform_fn_args: Optional[List] = None,
+            tokenizer: Optional[PreTrainedTokenizer] = None,
+            masks: Optional[List[List[int]]] = None,
     ) -> List[float]:
         num_calls, timeouts, tool_errors, tool_outputs, tool_runtimes, tool_calleds = infos
         good_outputs = [
@@ -2634,18 +2662,18 @@ if __name__ == "__main__":
             with Timer("[Data Preparation Thread] Calculating rewards -- 🧮 Generating partial rollouts"):
                 # Call the updated function that handles response replacement, mask updates, and re-tokenization
                 result = await maybe_replace_on_policy_rollouts_with_partial_rollouts(
-                    queries, 
-                    decoded_responses, 
-                    args.num_samples_per_prompt_rollout, 
-                    args.partial_rollouts_num_rollouts_to_replace, 
-                    args.partial_rollouts_model_names, 
+                    queries,
+                    decoded_responses,
+                    args.num_samples_per_prompt_rollout,
+                    args.partial_rollouts_num_rollouts_to_replace,
+                    args.partial_rollouts_model_names,
                     transform_fn_args=transform_fn_args,
                     tokenizer=tokenizer,
                     masks=masks,
                     responses=responses,
                     use_full_response_as_answer=args.use_full_response_as_answer
                 )
-                
+
                 # Handle the return value - could be responses, (responses, masks), or (responses, masks, tokenized_responses)
                 if isinstance(result, tuple) and len(result) == 3:
                     decoded_responses, masks, responses = result
@@ -2656,8 +2684,11 @@ if __name__ == "__main__":
 
         if args.apply_adaptive_rubric_reward and is_training:
             with Timer("[Data Preparation Thread] Calculating rewards -- 🧮 Calculating adaptive rubric reward"):
-                all_adaptive_rubrics, num_subsampled_answers_list = await _generate_instance_wise_adaptive_rubrics(decoded_responses, ground_truths, args.num_samples_per_prompt_rollout, rubric_buffer=rubric_buffer, use_full_responses=args.use_full_responses_for_adaptive_rubric, answer_length_limit_in_words=args.answer_length_limit_in_words)
-                
+                all_adaptive_rubrics, num_subsampled_answers_list = await _generate_instance_wise_adaptive_rubrics(
+                    decoded_responses, ground_truths, args.num_samples_per_prompt_rollout, rubric_buffer=rubric_buffer,
+                    use_full_responses=args.use_full_responses_for_adaptive_rubric,
+                    answer_length_limit_in_words=args.answer_length_limit_in_words)
+
                 # Cache adaptive rubric generation inputs/outputs for future training use
                 if args.cache_adaptive_rubric_data_dir:
                     try:
@@ -2675,21 +2706,24 @@ if __name__ == "__main__":
                     except Exception as e:
                         print(f"⚠️ Warning: Failed to cache adaptive rubric data at step {training_step}: {e}")
                         # Continue training even if caching fails
-                
+
                 # Store adaptive rubric scores for saving if requested
                 if args.save_adaptive_rubrics:
                     adaptive_rubric_scores_data = all_adaptive_rubrics
-                
+
                 # Update ground truths with adaptive rubrics and incorporate rubric buffer
-                ground_truths, valid_adaptive_rubric_rate, avg_num_ground_truths, avg_num_adaptive_rubrics, avg_num_active_buffer_rubrics, rubric_buffer, skipped_count = update_ground_truths_with_adaptive_rubrics(ground_truths, all_adaptive_rubrics, args.num_samples_per_prompt_rollout, rubric_buffer=rubric_buffer)
+                ground_truths, valid_adaptive_rubric_rate, avg_num_ground_truths, avg_num_adaptive_rubrics, avg_num_active_buffer_rubrics, rubric_buffer, skipped_count = update_ground_truths_with_adaptive_rubrics(
+                    ground_truths, all_adaptive_rubrics, args.num_samples_per_prompt_rollout,
+                    rubric_buffer=rubric_buffer)
                 metrics["objective/valid_adaptive_rubric_rate"] = valid_adaptive_rubric_rate
                 metrics["objective/avg_num_ground_truths"] = avg_num_ground_truths
                 metrics["objective/avg_num_adaptive_rubrics"] = avg_num_adaptive_rubrics
                 metrics["objective/avg_num_active_buffer_rubrics"] = avg_num_active_buffer_rubrics
                 metrics["objective/skipped_adaptive_rubrics"] = skipped_count
-                metrics["objective/avg_num_subsampled_answers_for_adaptive_rubric"] = sum(num_subsampled_answers_list) / len(num_subsampled_answers_list) if num_subsampled_answers_list else 0
-                
-                
+                metrics["objective/avg_num_subsampled_answers_for_adaptive_rubric"] = sum(
+                    num_subsampled_answers_list) / len(
+                    num_subsampled_answers_list) if num_subsampled_answers_list else 0
+
         if args.apply_verifiable_reward:
             with Timer("[Data Preparation Thread] Calculating rewards -- 🏆 Applying verifiable reward"):
                 verifiable_rewards, per_func_rewards, log_values = await apply_verifiable_reward(
@@ -2702,15 +2736,17 @@ if __name__ == "__main__":
                     queries=queries,
                     overwrite_reward_fn_tag=args.overwrite_reward_fn_tag,
                 )
-                
+
                 if len(verifiable_rewards) != len(scores):
                     raise ValueError(f"{len(verifiable_rewards)=} != {len(scores)=}")
                 # slightly complex combo of good outputs and additive format reward
                 for i in range(len(verifiable_rewards)):
                     if not args.only_reward_good_outputs or (good_outputs[i] and args.only_reward_good_outputs):
-                        if (args.apply_r1_style_format_reward or args.apply_rl_rag_format_reward) and args.additive_format_reward:
+                        if (
+                                args.apply_r1_style_format_reward or args.apply_rl_rag_format_reward) and args.additive_format_reward:
                             scores[i] = verifiable_rewards[i] + scores[i]
-                        elif (args.apply_r1_style_format_reward or args.apply_rl_rag_format_reward) and not args.additive_format_reward:
+                        elif (
+                                args.apply_r1_style_format_reward or args.apply_rl_rag_format_reward) and not args.additive_format_reward:
                             # Check which format reward was applied
                             if args.apply_r1_style_format_reward:
                                 scores[i] = verifiable_rewards[i] if format_scores[i] == 1 else 0
@@ -2731,13 +2767,14 @@ if __name__ == "__main__":
                         metrics[f"objective/reward_log_values/{key}"] = np.array(value).mean()
                     else:
                         # Skip non-numeric values (like dictionaries) or log them differently
-                        print(f"Skipping non-numeric log_values key '{key}' with value types: {[type(v).__name__ for v in value[:3]]}")  # Show first 3 types for debugging
+                        print(
+                            f"Skipping non-numeric log_values key '{key}' with value types: {[type(v).__name__ for v in value[:3]]}")  # Show first 3 types for debugging
                 # log aggreement between adaptive rubric and persistent rubric
                 if args.apply_adaptive_rubric_reward and "persistent_rubric_reward" in log_values and "adaptive_rubric_reward" in log_values:
                     with Timer("[Data Preparation Thread] Calculating rewards -- 🧮 Calculating direction agreement"):
                         persistent_rubric_rewards = log_values["persistent_rubric_reward"]
                         adaptive_rubric_rewards = log_values["adaptive_rubric_reward"]
-                        
+
                         # Compute per-prompt directional agreement
                         if queries is not None:
                             direction_agreement_dict = compute_direction_agreement_per_prompt(
@@ -2749,7 +2786,7 @@ if __name__ == "__main__":
                                 metrics[f"analysis/persistent_vs_adaptive_rubric_agreement/{key}"] = value
                         else:
                             print("Warning: Cannot compute per-prompt direction agreement because 'queries' is None")
-                
+
                 # reshuffle around per_func rewards
                 per_func_lists = defaultdict(list)
                 for reward_dict in per_func_rewards:
@@ -2760,7 +2797,7 @@ if __name__ == "__main__":
                     np_value = np.array(value)
                     metrics[f"objective/{key}_reward"] = np_value.mean()
                     metrics[f"objective/{key}_correct_rate"] = (np_value > 0.0).mean()
-                
+
                 # log per original source dataset, if provided
                 if source_datasets is not None and len(source_datasets) == len(verifiable_rewards):
                     source_to_values = defaultdict(list)
@@ -2770,7 +2807,7 @@ if __name__ == "__main__":
                         arr = np.array(vals)
                         metrics[f"objective/source/{src}_verifiable_reward"] = arr.mean()
                         metrics[f"objective/source/{src}_verifiable_correct_rate"] = (arr > 0.0).mean()
-                
+
                 # log direction agreement
                 if args.log_direction_agreement:
                     with Timer("[Data Preparation Thread] Calculating rewards -- 🧮 Calculating direction agreement"):
@@ -2791,57 +2828,58 @@ if __name__ == "__main__":
             with Timer("[Data Preparation Thread] Calculating rewards -- 🧮 Managing rubric buffer"):
                 # Collect rubric statistics for filtering
                 rubric_key_stats = {}
-                
+
                 # Process verifiable rewards to get per-rubric statistics
                 if args.apply_verifiable_reward and 'per_rubric_rewards' in log_values:
                     per_rubric_rewards = log_values['per_rubric_rewards']
-                    
+
                     # Group rewards by query and collect rubric weights
                     rewards_by_query = {}
                     rubric_key_weights = {}
                     for i, (query, ground_truth) in enumerate(zip(queries or [], ground_truths)):
                         if isinstance(ground_truth, str):
                             ground_truth = json.loads(ground_truth)
-                        elif isinstance(ground_truth, list) and len(ground_truth) > 0 and isinstance(ground_truth[0], str):
+                        elif isinstance(ground_truth, list) and len(ground_truth) > 0 and isinstance(ground_truth[0],
+                                                                                                     str):
                             ground_truth = json.loads(ground_truth[0])
-                        
+
                         if query not in rewards_by_query:
                             rewards_by_query[query] = []
-                        
+
                         # Extract rubrics list from ground truth
                         rubrics_list = ground_truth.get("rubrics", [])
-                        
+
                         # Get the rewards for this specific response
                         if i < len(per_rubric_rewards):
                             response_rewards = per_rubric_rewards[i]
-                            
+
                             # Check if using overall score mode (general_rubric or likert_rubric)
                             # If so, expand the single score to all actual rubric keys
                             if "general_rubric" in response_rewards or "likert_rubric" in response_rewards:
                                 overall_key = "general_rubric" if "general_rubric" in response_rewards else "likert_rubric"
                                 overall_score = response_rewards[overall_key]
-                                
+
                                 # Expand to all actual rubric keys in ground truth
                                 expanded_rewards = {}
                                 for rubric in rubrics_list:
                                     rubric_key = create_rubric_key(query, rubric)
                                     expanded_rewards[rubric_key] = overall_score  # Same score for all rubrics
-                                
+
                                 rewards_by_query[query].append(expanded_rewards)
                             else:
                                 rewards_by_query[query].append(response_rewards)
-                        
+
                         # Build rubric_key->weight mapping
                         for rubric in rubrics_list:
                             rubric_key = create_rubric_key(query, rubric)
                             if rubric_key not in rubric_key_weights:
                                 rubric_key_weights[rubric_key] = []
                             rubric_key_weights[rubric_key].append(rubric["weight"])
-                    
+
                     # Average weights for rubric keys with multiple rubrics (though this should be rare now)
                     for rubric_key in rubric_key_weights:
                         rubric_key_weights[rubric_key] = np.mean(rubric_key_weights[rubric_key])
-                    
+
                     if args.normalize_rubric_scores:
                         # Compute per-rubric weighted normalized scores
                         for query, query_rewards_list in rewards_by_query.items():
@@ -2849,7 +2887,7 @@ if __name__ == "__main__":
                                 for rubric_key, reward_list in query_rewards.items():
                                     if rubric_key not in rubric_key_stats:
                                         rubric_key_stats[rubric_key] = {"rewards": [], "weights": []}
-                                    
+
                                     # Normalize by weight
                                     weight = rubric_key_weights.get(rubric_key, 1.0)
                                     normalized_rewards = [r / weight if weight > 0 else r for r in reward_list]
@@ -2862,11 +2900,11 @@ if __name__ == "__main__":
                                 for rubric_key, reward_list in query_rewards.items():
                                     if rubric_key not in rubric_key_stats:
                                         rubric_key_stats[rubric_key] = {"rewards": [], "weights": []}
-                                    
+
                                     weight = rubric_key_weights.get(rubric_key, 1.0)
                                     rubric_key_stats[rubric_key]["rewards"].extend(reward_list)
                                     rubric_key_stats[rubric_key]["weights"].extend([weight] * len(reward_list))
-                    
+
                     # Compute statistics for each rubric key
                     for rubric_key in rubric_key_stats:
                         rewards = np.array(rubric_key_stats[rubric_key]["rewards"])
@@ -2878,12 +2916,12 @@ if __name__ == "__main__":
                             rubric_key_stats[rubric_key]["mean"] = 0.0
                             rubric_key_stats[rubric_key]["std"] = 0.0
                             rubric_key_stats[rubric_key]["count"] = 0
-                
+
                 # Filter rubrics based on statistics
                 if rubric_key_stats:
                     rubrics_to_deactivate = []
                     rubrics_by_query_std = {}
-                    
+
                     # Find rubrics with zero std (no learning signal)
                     for rubric_key, stats in rubric_key_stats.items():
                         # Find which query and rubric this key corresponds to
@@ -2903,7 +2941,7 @@ if __name__ == "__main__":
                             else:
                                 continue
                             break
-                    
+
                     # Move zero-std rubrics to inactive
                     moved_count = 0
                     for query, rubric in rubrics_to_deactivate:
@@ -2912,20 +2950,21 @@ if __name__ == "__main__":
                             buffer_data["active_rubrics"].remove(rubric)
                             buffer_data["inactive_rubrics"].append(rubric)
                             moved_count += 1
-                    
+
                     # Apply max_active_rubrics cap per query
                     capped_count = 0
                     for query, rubric_std_pairs in rubrics_by_query_std.items():
                         buffer_data = rubric_buffer[query]
                         active_rubrics = buffer_data["active_rubrics"]
-                        
+
                         if len(active_rubrics) > args.max_active_rubrics:
                             # Sort by std descending and keep only top max_active_rubrics
                             rubric_std_pairs.sort(key=lambda x: x[1], reverse=True)
-                            
+
                             # Find rubric keys to keep (top std ones)
-                            rubric_keys_to_keep = set(create_rubric_key(query, rubric) for rubric, _ in rubric_std_pairs[:args.max_active_rubrics])
-                            
+                            rubric_keys_to_keep = set(create_rubric_key(query, rubric) for rubric, _ in
+                                                      rubric_std_pairs[:args.max_active_rubrics])
+
                             # Move excess rubrics to inactive
                             new_active = []
                             for rubric in active_rubrics:
@@ -2937,41 +2976,43 @@ if __name__ == "__main__":
                                     # Move low-std rubrics to inactive
                                     buffer_data["inactive_rubrics"].append(rubric)
                                     capped_count += 1
-                            
+
                             buffer_data["active_rubrics"] = new_active
-                    
+
                     if moved_count > 0 or capped_count > 0:
-                        print(f"[Adaptive Rubric Filtering] Moved {moved_count} zero-std rubrics and {capped_count} low-std rubrics to inactive")
-                        
+                        print(
+                            f"[Adaptive Rubric Filtering] Moved {moved_count} zero-std rubrics and {capped_count} low-std rubrics to inactive")
+
                 else:
                     print("No statistics to filter rubrics based on, randomly select some rubrics to deactivate")
-                    
+
                     # When no statistics available, randomly deactivate excess rubrics
                     random_deactivated_count = 0
                     for query, buffer_data in rubric_buffer.items():
                         active_rubrics = buffer_data.get("active_rubrics", [])
-                        
+
                         if len(active_rubrics) > args.max_active_rubrics:
                             # Randomly select rubrics to keep
                             num_to_keep = args.max_active_rubrics
                             num_to_deactivate = len(active_rubrics) - num_to_keep
-                            
+
                             # Randomly shuffle and split
                             shuffled_rubrics = list(active_rubrics)
                             np.random.shuffle(shuffled_rubrics)
-                            
+
                             # Keep first max_active_rubrics, move rest to inactive
                             buffer_data["active_rubrics"] = shuffled_rubrics[:num_to_keep]
                             buffer_data["inactive_rubrics"].extend(shuffled_rubrics[num_to_keep:])
                             random_deactivated_count += num_to_deactivate
-                    
+
                     if random_deactivated_count > 0:
-                        print(f"[Adaptive Rubric Filtering] Randomly deactivated {random_deactivated_count} rubrics to maintain max_active_rubrics limit")
-                    
+                        print(
+                            f"[Adaptive Rubric Filtering] Randomly deactivated {random_deactivated_count} rubrics to maintain max_active_rubrics limit")
 
         # Return adaptive rubric scores if they were generated and saving is requested
         if adaptive_rubric_scores_data is not None:
             return scores, metrics, rubric_buffer, adaptive_rubric_scores_data
         return scores, metrics, rubric_buffer
+
 
     main(args, tokenizer_config, model_config, reward_fn)
