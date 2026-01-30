@@ -4,10 +4,11 @@ import argparse
 import signal
 import sys
 from dataclasses import dataclass
+from threading import Thread
 from typing import Optional
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
 import os
 
@@ -73,6 +74,11 @@ def parse_args() -> argparse.Namespace:
         default=SYSTEM_PROMPT_V20250824,
         help="可选的系统提示词，用于支持 chat 模型",
     )
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="开启后将使用流式输出，每个 token 生成后立刻打印",
+    )
     return parser.parse_args()
 
 
@@ -131,8 +137,42 @@ def generate_reply(bundle: ModelBundle, prompt: str, system_prompt: Optional[str
     return bundle.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
 
-def interactive_chat(bundle: ModelBundle, system_prompt: Optional[str], max_new_tokens: int,
-                     temperature: float) -> None:
+def stream_reply(
+    bundle: ModelBundle,
+    prompt: str,
+    system_prompt: Optional[str],
+    max_new_tokens: int,
+    temperature: float,
+):
+    streamer = TextIteratorStreamer(
+        bundle.tokenizer,
+        skip_prompt=True,
+        skip_special_tokens=True,
+    )
+    inputs = build_inputs(bundle.tokenizer, prompt, system_prompt)
+    inputs = {k: v.to(bundle.device) for k, v in inputs.items()}
+    generation_kwargs = dict(
+        **inputs,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        do_sample=True,
+        pad_token_id=bundle.tokenizer.eos_token_id,
+        streamer=streamer,
+    )
+    worker = Thread(target=bundle.model.generate, kwargs=generation_kwargs, daemon=True)
+    worker.start()
+    for chunk in streamer:
+        yield chunk
+    worker.join()
+
+
+def interactive_chat(
+    bundle: ModelBundle,
+    system_prompt: Optional[str],
+    max_new_tokens: int,
+    temperature: float,
+    stream: bool,
+) -> None:
     print("进入交互模式，按 Ctrl+C 或输入 /exit 退出。\n")
 
     while True:
@@ -146,8 +186,20 @@ def interactive_chat(bundle: ModelBundle, system_prompt: Optional[str], max_new_
         if user.lower() in {"/exit", "exit", "quit", ":q"}:
             print("再见！")
             break
-        reply = generate_reply(bundle, user, system_prompt, max_new_tokens, temperature)
-        print(f"模型: {reply}\n")
+        if stream:
+            print("模型: ", end="", flush=True)
+            for piece in stream_reply(
+                bundle,
+                user,
+                system_prompt,
+                max_new_tokens,
+                temperature,
+            ):
+                print(piece, end="", flush=True)
+            print("\n")
+        else:
+            reply = generate_reply(bundle, user, system_prompt, max_new_tokens, temperature)
+            print(f"模型: {reply}\n")
 
 
 def setup_signal_handlers() -> None:
@@ -172,6 +224,7 @@ def main() -> None:
         system_prompt=args.system,
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
+        stream=args.stream,
     )
 
 

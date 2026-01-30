@@ -5,11 +5,12 @@ import os
 import signal
 import sys
 from dataclasses import dataclass
+from threading import Thread
 from typing import Optional
 
 import torch
 from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
 from default_prompt import SYSTEM_PROMPT_V20250824
 
@@ -20,7 +21,7 @@ os.environ["REQUESTS_CA_BUNDLE"] = HUGGINGFACE_CERT_FILE_PATH
 os.environ["SSL_CERT_FILE"] = HUGGINGFACE_CERT_FILE_PATH
 
 DEFAULT_BASE_MODEL = "Qwen/Qwen3-4B"
-DEFAULT_LORA_PATH = "/Users/maz/downloads/qwen3-4B-sft-final"
+DEFAULT_LORA_PATH = "/Users/maz/Documents/AI-Researcher/models/qwen3-4B-sft-final"
 
 
 @dataclass
@@ -80,6 +81,11 @@ def parse_args() -> argparse.Namespace:
         "--merge-lora",
         action="store_true",
         help="将 LoRA 权重并入基座模型后再推理 (占用更多显存)",
+    )
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="开启后逐 token 输出回复",
     )
     return parser.parse_args()
 
@@ -155,11 +161,41 @@ def generate_reply(
     return bundle.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
 
+def stream_reply(
+    bundle: ModelBundle,
+    prompt: str,
+    system_prompt: Optional[str],
+    max_new_tokens: int,
+    temperature: float,
+):
+    streamer = TextIteratorStreamer(
+        bundle.tokenizer,
+        skip_prompt=True,
+        skip_special_tokens=True,
+    )
+    inputs = build_inputs(bundle.tokenizer, prompt, system_prompt)
+    inputs = {k: v.to(bundle.device) for k, v in inputs.items()}
+    generation_kwargs = dict(
+        **inputs,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        do_sample=True,
+        pad_token_id=bundle.tokenizer.eos_token_id,
+        streamer=streamer,
+    )
+    worker = Thread(target=bundle.model.generate, kwargs=generation_kwargs, daemon=True)
+    worker.start()
+    for chunk in streamer:
+        yield chunk
+    worker.join()
+
+
 def interactive_chat(
     bundle: ModelBundle,
     system_prompt: Optional[str],
     max_new_tokens: int,
     temperature: float,
+    stream: bool,
 ) -> None:
     print("进入 LoRA 模型交互模式，按 Ctrl+C 或输入 /exit 退出。\n")
     while True:
@@ -173,8 +209,20 @@ def interactive_chat(
         if user.lower() in {"/exit", "exit", "quit", ":q"}:
             print("再见！")
             break
-        reply = generate_reply(bundle, user, system_prompt, max_new_tokens, temperature)
-        print(f"模型: {reply}\n")
+        if stream:
+            print("模型: ", end="", flush=True)
+            for piece in stream_reply(
+                bundle,
+                user,
+                system_prompt,
+                max_new_tokens,
+                temperature,
+            ):
+                print(piece, end="", flush=True)
+            print("\n")
+        else:
+            reply = generate_reply(bundle, user, system_prompt, max_new_tokens, temperature)
+            print(f"模型: {reply}\n")
 
 
 def setup_signal_handlers() -> None:
@@ -205,6 +253,7 @@ def main() -> None:
         system_prompt=args.system,
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
+        stream=args.stream,
     )
 
 
